@@ -1,0 +1,2 @@
+web: gunicorn backend.wsgi:app --workers 2 --bind 0.0.0.0:$PORT --timeout 120
+worker: python -m backend.worker --interval 300
