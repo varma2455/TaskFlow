@@ -1,0 +1,83 @@
+services:
+  # 1. Web Service: Flask REST API Backend
+  - type: web
+    name: taskflow-backend
+    env: python
+    rootDir: backend
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn backend.wsgi:app --workers 2 --bind 0.0.0.0:$PORT --timeout 120
+    healthCheckPath: /api/health
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: DEBUG
+        value: "False"
+      - key: SECRET_KEY
+        generateValue: true
+      - key: FRONTEND_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GMAIL_SENDER_EMAIL
+        sync: false
+      - key: GMAIL_REFRESH_TOKEN
+        sync: false
+      - key: REMINDER_WINDOW_HOURS
+        value: "24"
+      - key: MAX_EMAIL_RETRIES
+        value: "3"
+
+  # 2. Background Worker: Outbox & Deadline Reminders Processor
+  - type: worker
+    name: taskflow-reminder-worker
+    env: python
+    rootDir: backend
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m backend.worker --interval 300
+    envVars:
+      - key: SUPABASE_URL
+        fromService:
+          type: web
+          name: taskflow-backend
+          envVarKey: SUPABASE_URL
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        fromService:
+          type: web
+          name: taskflow-backend
+          envVarKey: SUPABASE_SERVICE_ROLE_KEY
+      - key: GOOGLE_CLIENT_ID
+        fromService:
+          type: web
+          name: taskflow-backend
+          envVarKey: GOOGLE_CLIENT_ID
+      - key: GOOGLE_CLIENT_SECRET
+        fromService:
+          type: web
+          name: taskflow-backend
+          envVarKey: GOOGLE_CLIENT_SECRET
+      - key: GMAIL_SENDER_EMAIL
+        fromService:
+          type: web
+          name: taskflow-backend
+          envVarKey: GMAIL_SENDER_EMAIL
+      - key: GMAIL_REFRESH_TOKEN
+        fromService:
+          type: web
+          name: taskflow-backend
+          envVarKey: GMAIL_REFRESH_TOKEN
+      - key: REMINDER_WINDOW_HOURS
+        value: "24"
