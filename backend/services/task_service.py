@@ -25,7 +25,7 @@ class TaskService:
         Enforces authorization: users see tasks they created, are assigned to, or admin visibility.
         """
         supabase = get_supabase_client()
-        is_admin = current_user.get("role") in ("admin", "manager")
+        is_admin = current_user.get("role") == "admin"
         user_id = current_user["id"]
 
         query = supabase.table("tasks").select("*")
@@ -61,6 +61,10 @@ class TaskService:
 
         if priority_filter and priority_filter in VALID_PRIORITIES:
             tasks = [t for t in tasks if t.get("priority") == priority_filter]
+
+        assignee_filter = params.get("assignee_id")
+        if assignee_filter:
+            tasks = [t for t in tasks if str(t.get("assignee_id")) == str(assignee_filter)]
 
         if search_query:
             q_lower = search_query.lower()
@@ -129,7 +133,7 @@ class TaskService:
         task = res.data[0]
         creator_id = str(task.get("creator_id"))
         assignee_id = str(task.get("assignee_id")) if task.get("assignee_id") else None
-        is_admin = current_user.get("role") in ("admin", "manager")
+        is_admin = current_user.get("role") == "admin"
 
         # Authorization check
         if not (is_admin or creator_id == current_user["id"] or assignee_id == current_user["id"]):
@@ -164,11 +168,11 @@ class TaskService:
         else:
             assignee = None
 
-        due_date = payload.get("due_date")
-        if due_date:
+        due_val = payload.get("due_at") or payload.get("due_date")
+        if due_val:
             try:
                 # Validate ISO datetime format
-                datetime.fromisoformat(due_date.replace("Z", "+00:00"))
+                datetime.fromisoformat(due_val.replace("Z", "+00:00"))
             except Exception:
                 raise ValueError("Invalid due_date format. Must be an ISO-8601 timestamp")
 
@@ -180,7 +184,8 @@ class TaskService:
             "priority": priority,
             "creator_id": current_user["id"],
             "assignee_id": assignee_id if assignee_id else None,
-            "due_date": due_date,
+            "due_date": due_val,
+            "due_at": due_val,
         }
 
         insert_res = supabase.table("tasks").insert(task_data).execute()
@@ -228,9 +233,12 @@ class TaskService:
         """
         task = cls.get_task_by_id(task_id, current_user)
         supabase = get_supabase_client()
-
         update_data = {}
         activity_details = {}
+
+        # Enforce that creator_id can never be changed
+        if "creator_id" in payload and str(payload["creator_id"]) != str(task.get("creator_id")):
+            raise PermissionError("Cannot modify task creator ID")
 
         if "title" in payload:
             new_title = (payload["title"] or "").strip()
@@ -249,14 +257,15 @@ class TaskService:
             update_data["priority"] = new_pri
             activity_details["priority"] = new_pri
 
-        if "due_date" in payload:
-            new_due = payload["due_date"]
+        if "due_date" in payload or "due_at" in payload:
+            new_due = payload.get("due_at") or payload.get("due_date")
             if new_due:
                 try:
                     datetime.fromisoformat(new_due.replace("Z", "+00:00"))
                 except Exception:
-                    raise ValueError("Invalid due_date format")
+                    raise ValueError("Invalid due_date format. Must be an ISO-8601 timestamp")
             update_data["due_date"] = new_due
+            update_data["due_at"] = new_due
             activity_details["due_date"] = new_due
 
         if "assignee_id" in payload:

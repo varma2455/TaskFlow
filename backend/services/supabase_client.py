@@ -11,38 +11,7 @@ class MockDataStore:
         self.reset()
 
     def reset(self):
-        self.profiles = [
-            {
-                "id": "11111111-1111-1111-1111-111111111111",
-                "email": "demo.user@taskflow.dev",
-                "full_name": "Demo Admin",
-                "avatar_url": "https://api.dicebear.com/7.x/avataaars/svg?seed=DemoAdmin",
-                "role": "admin",
-                "reminder_preference": True,
-                "created_at": datetime.now(timezone.utc).isoformat(),
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-            },
-            {
-                "id": "22222222-2222-2222-2222-222222222222",
-                "email": "teammate@taskflow.dev",
-                "full_name": "Sarah Connor",
-                "avatar_url": "https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah",
-                "role": "member",
-                "reminder_preference": True,
-                "created_at": datetime.now(timezone.utc).isoformat(),
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-            },
-            {
-                "id": "33333333-3333-3333-3333-333333333333",
-                "email": "external.user@taskflow.dev",
-                "full_name": "Unrelated User",
-                "avatar_url": "https://api.dicebear.com/7.x/avataaars/svg?seed=External",
-                "role": "member",
-                "reminder_preference": False,
-                "created_at": datetime.now(timezone.utc).isoformat(),
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-            }
-        ]
+        self.profiles = []
         self.tasks = []
         self.activity_logs = []
         self.notifications = []
@@ -252,3 +221,75 @@ def get_supabase_client():
     logger.info("Using in-memory mock data store for Supabase operations.")
     _supabase_client = MockSupabaseClient(mock_store)
     return _supabase_client
+
+
+# Direct PostgreSQL connection pooling (supported alongside Supabase REST client)
+_pg_pool = None
+
+def get_pg_pool():
+    global _pg_pool
+    if _pg_pool is not None:
+        return _pg_pool
+
+    if Config.DATABASE_URL:
+        try:
+            from psycopg2 import pool
+            _pg_pool = pool.ThreadedConnectionPool(
+                minconn=Config.DB_POOL_MIN,
+                maxconn=Config.DB_POOL_MAX,
+                dsn=Config.DATABASE_URL,
+            )
+            logger.info("Direct PostgreSQL connection pool initialized.")
+            return _pg_pool
+        except Exception as e:
+            logger.warning("Failed to initialize PostgreSQL pool (%s). Direct pool unavailable.", e)
+            return None
+    return None
+
+
+def check_direct_pg_connection():
+    """
+    Test direct PostgreSQL connection without exposing credentials.
+    Returns: (is_connected: bool, details: dict)
+    """
+    if not Config.DATABASE_URL:
+        return False, {"configured": False, "message": "DATABASE_URL not set in environment (using Supabase REST client)."}
+
+    try:
+        pool_inst = get_pg_pool()
+        if pool_inst:
+            conn = pool_inst.getconn()
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT 1;")
+                    cur.fetchone()
+                    # Check schema_migrations table
+                    cur.execute("""
+                        SELECT count(*) FROM information_schema.tables 
+                        WHERE table_schema = 'public' AND table_name = 'schema_migrations';
+                    """)
+                    has_mig_table = bool(cur.fetchone()[0])
+                    applied_count = 0
+                    if has_mig_table:
+                        cur.execute("SELECT count(*) FROM public.schema_migrations;")
+                        applied_count = cur.fetchone()[0]
+
+                return True, {
+                    "configured": True,
+                    "connected": True,
+                    "pooling_enabled": True,
+                    "min_connections": Config.DB_POOL_MIN,
+                    "max_connections": Config.DB_POOL_MAX,
+                    "schema_migrations_table": has_mig_table,
+                    "applied_migrations_count": applied_count,
+                }
+            finally:
+                pool_inst.putconn(conn)
+    except Exception as e:
+        return False, {
+            "configured": True,
+            "connected": False,
+            "error": "Connection failed"
+        }
+
+    return False, {"configured": False, "message": "PostgreSQL pool unavailable."}

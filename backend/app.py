@@ -10,6 +10,8 @@ from backend.routes.user_routes import user_bp
 from backend.routes.notification_routes import notification_bp
 from backend.routes.dashboard_routes import dashboard_bp
 from backend.routes.reminder_routes import reminder_bp
+from backend.routes.admin_routes import admin_bp
+from backend.routes.setup_routes import setup_bp
 
 # Configure logging
 logging.basicConfig(
@@ -34,12 +36,23 @@ def create_app(config_class=Config):
 
     # 2. Register Blueprints
     app.register_blueprint(health_bp, url_prefix="/api")
+    app.register_blueprint(setup_bp, url_prefix="/api")
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
     app.register_blueprint(task_bp, url_prefix="/api/tasks")
     app.register_blueprint(user_bp, url_prefix="/api/users")
     app.register_blueprint(notification_bp, url_prefix="/api/notifications")
     app.register_blueprint(dashboard_bp, url_prefix="/api/dashboard")
     app.register_blueprint(reminder_bp, url_prefix="/api/reminders")
+    app.register_blueprint(admin_bp, url_prefix="/api/admin")
+
+    # Direct /api/me route as required by specifications
+    from backend.services.auth_service import require_auth
+    from backend.routes.auth_routes import get_current_user_profile
+
+    @app.route("/api/me", methods=["GET"])
+    @require_auth
+    def api_me():
+        return get_current_user_profile()
 
     # 3. Security Headers Middleware
     @app.after_request

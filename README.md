@@ -7,12 +7,13 @@ TaskFlow is a production-ready, full-stack collaborative task and deadline manag
 
 ## 🌟 Key Features
 
-- **Google OAuth 2.0 & Secure Sessions**: Seamless Google Sign-In with server-verified JWT claims, session restoration, and one-click demo evaluation profiles.
-- **Granular Authorization & RBAC**: Strict server-side permission checks and PostgreSQL Row Level Security (RLS). Users can only view, mutate, or delete authorized tasks.
-- **Dynamic Task Workflow & Kanban**: Interactive Kanban board and List view with search, multi-criteria filtering (status, priority, overdue, due soon), and chronological activity audit logs.
+- **Google OAuth 2.0 & Secure Sessions**: Seamless Google Sign-In with PKCE code exchange (`prompt: 'select_account'`), session persistence, and authoritative role routing.
+- **Dual Roles (Admin vs User)**: Authoritative RBAC isolating user tasks (`/dashboard`) while granting administrators full management oversight, user role promotions, and system audits (`/admin`).
+- **In-Built Setup & Diagnostics Wizard**: Self-serve `/setup` dashboard (`/setup/authentication`, `/setup/database`, `/setup/email`) connected to safe `GET /api/setup/status` with zero secret leakage.
+- **Admin Promotion CLI**: Secure command-line tool `scripts/promote_admin.py` for bootstrapping initial administrative accounts.
 - **Durable Gmail Notifications (Outbox Pattern)**: Transactional email notifications on task creation, teammate assignment, and completion with idempotency duplicate prevention.
-- **Proactive Deadline & Overdue Management**: Automatic overdue highlighting, time-remaining calculations, and background reminder worker respecting user preferences.
-- **Supabase Realtime Sync**: Instant multi-client synchronization across active sessions using PostgreSQL logical replication channels.
+- **Granular Authorization & RBAC**: Strict server-side permission checks and PostgreSQL Row Level Security (RLS). Users can only view or mutate authorized tasks.
+- **Dynamic Task Workflow & Kanban**: Interactive Kanban board and List view with search, multi-criteria filtering, and chronological activity audit logs.
 - **Production-Ready Deployments**: Fully configured for **Vercel** (Frontend edge hosting) and **Render** (Gunicorn WSGI web service and background worker).
 
 ---
@@ -21,11 +22,11 @@ TaskFlow is a production-ready, full-stack collaborative task and deadline manag
 
 | Layer | Technologies |
 | :--- | :--- |
-| **Frontend** | Next.js 14 (App Router), TypeScript, Tailwind CSS, Lucide Icons |
+| **Frontend** | Next.js 14 (App Router), TypeScript, Tailwind CSS, TanStack Query, Lucide Icons |
 | **Backend** | Flask 3.0, Gunicorn 22.0, PyJWT, Cryptography, Requests |
-| **Database & Auth** | Supabase PostgreSQL, GoTrue / Supabase Auth, Row Level Security (RLS) |
-| **Email Service** | Google API Client, Gmail API (OAuth 2.0, Scoped `gmail.send`) |
-| **Testing** | Pytest, Pytest-Mock |
+| **Database & Auth** | Supabase PostgreSQL, GoTrue / Supabase Auth (PKCE), Row Level Security (RLS) |
+| **Email Service** | Google API Client, Gmail API (OAuth 2.0, Scoped `gmail.send`, Durable Outbox) |
+| **Testing** | Pytest, Pytest-Mock (36 / 36 passing tests) |
 | **Deployment** | Vercel (Frontend), Render (Flask API & Worker) |
 
 ---
@@ -36,22 +37,23 @@ TaskFlow is a production-ready, full-stack collaborative task and deadline manag
 flowchart TD
     subgraph Client["Frontend Client (Next.js 14)"]
         UI["React UI (App Router)"]
-        AC["AuthContext (JWT State)"]
+        AC["AuthContext (PKCE & Cache Hygiene)"]
         API_C["ApiClient (Fetch with Bearer)"]
-        RT_C["Supabase Realtime Client"]
+        SETUP["Setup & Diagnostics Wizard (/setup/*)"]
     end
 
     subgraph Backend["Backend Gateway (Flask on Render)"]
         FLASK["Flask Application Factory"]
-        AUTH_S["AuthService (@require_auth, PyJWT)"]
+        AUTH_S["AuthService (@require_auth, @require_role)"]
+        SETUP_R["Setup Routes (Safe Status & Zero Leaks)"]
+        ADMIN_R["Admin Routes (Stats, Users, Activity)"]
         TASK_S["TaskService (Business Rules & RBAC)"]
         GMAIL_S["GmailService (Outbox Pattern)"]
         REMIND_S["ReminderService (Deadline Scanner)"]
-        WORKER["Background Worker (worker.py)"]
     end
 
     subgraph Database["Database & Services (Supabase & Google)"]
-        SUPA_AUTH["Supabase Auth (Google OAuth)"]
+        SUPA_AUTH["Supabase Auth (Google OAuth 2.0)"]
         PG_DB[("Supabase PostgreSQL\n- profiles\n- tasks\n- activity_logs\n- notifications\n- email_outbox")]
         RLS["PostgreSQL Row Level Security"]
         GMAIL_API["Google Gmail API (REST)"]
@@ -62,17 +64,14 @@ flowchart TD
     UI --> API_C
     API_C -- "HTTPS (Bearer Token)" --> FLASK
     FLASK --> AUTH_S
+    FLASK --> SETUP_R
+    FLASK --> ADMIN_R
     AUTH_S --> TASK_S
     TASK_S --> PG_DB
     TASK_S --> GMAIL_S
     GMAIL_S --> PG_DB
     GMAIL_S -- "Send Email" --> GMAIL_API
-    WORKER --> REMIND_S
-    REMIND_S --> PG_DB
-    REMIND_S --> GMAIL_S
     PG_DB --> RLS
-    PG_DB -- "WAL Logical Replication" --> RT_C
-    RT_C --> UI
 ```
 
 ---
@@ -83,20 +82,22 @@ flowchart TD
 TASK/
 ├── backend/
 │   ├── routes/              # Flask Blueprint route handlers
-│   │   ├── auth_routes.py
-│   │   ├── dashboard_routes.py
-│   │   ├── health_routes.py
-│   │   ├── notification_routes.py
-│   │   ├── reminder_routes.py
-│   │   ├── task_routes.py
-│   │   └── user_routes.py
+│   │   ├── admin_routes.py      # Authoritative admin endpoints (stats, users, audit)
+│   │   ├── auth_routes.py       # Session sync, profile management
+│   │   ├── dashboard_routes.py  # User KPI statistics
+│   │   ├── health_routes.py     # Production health check
+│   │   ├── notification_routes.py # In-app notifications
+│   │   ├── reminder_routes.py   # Automated reminder triggers
+│   │   ├── setup_routes.py      # In-built setup diagnostics (/api/setup/status)
+│   │   ├── task_routes.py       # User task operations & filtering
+│   │   └── user_routes.py       # User directory
 │   ├── services/            # Core business logic and external integrations
-│   │   ├── auth_service.py      # JWT decoding, claims verification, @require_auth
+│   │   ├── auth_service.py      # JWT decoding, @require_auth, @require_role
 │   │   ├── gmail_service.py     # Gmail API client, durable outbox, HTML templates
 │   │   ├── reminder_service.py  # Deadline calculations, timezone safety
 │   │   ├── supabase_client.py   # Client factory with offline test adapter
 │   │   └── task_service.py      # Task CRUD, authorization, audit logs
-│   ├── tests/               # Pytest automated test suite
+│   ├── tests/               # Pytest automated test suite (36 tests)
 │   ├── app.py               # Flask application factory, CORS, security headers
 │   ├── config.py            # Environment configuration
 │   ├── Procfile             # Render process definitions (web & worker)
@@ -107,31 +108,42 @@ TASK/
 ├── frontend/
 │   ├── src/
 │   │   ├── app/             # Next.js App Router pages
-│   │   │   ├── dashboard/   # Live KPIs and recent deliverables
-│   │   │   ├── login/       # Google sign-in and demo profiles
+│   │   │   ├── admin/       # Admin Dashboard, user management, system tasks, audit
+│   │   │   ├── auth/callback# PKCE OAuth code exchange & role routing
+│   │   │   ├── board/       # Kanban board
+│   │   │   ├── dashboard/   # User Workspace (isolated personal tasks)
+│   │   │   ├── login/       # Google sign-in with PublicNavbar
 │   │   │   ├── notifications/# User notification center
 │   │   │   ├── settings/    # Profile, reminder preferences, health check
-│   │   │   ├── tasks/       # Kanban board, list view, search, filters
+│   │   │   ├── setup/       # In-built setup wizard (Overview, Auth, DB, Email)
+│   │   │   ├── tasks/       # Task list view, search, filters
 │   │   │   ├── team/        # Teammate directory
 │   │   │   ├── globals.css  # Tailwind global styles
-│   │   │   ├── layout.tsx   # Root layout with AuthProvider & Navbar
-│   │   │   └── page.tsx     # Public landing page
-│   │   ├── components/      # Modular UI components (Badge, Modal, Navbar, Skeleton)
-│   │   ├── context/         # AuthContext provider
+│   │   │   ├── layout.tsx   # Root layout with AuthProvider & QueryClient
+│   │   │   └── page.tsx     # Public landing page with PublicNavbar & anchor sections
+│   │   ├── components/      # Reusable UI components (PublicNavbar, AdminShell, AppShell)
+│   │   ├── context/         # AuthContext provider (PKCE & cache flushing)
 │   │   └── lib/             # Supabase client and typed ApiClient
 │   ├── package.json
 │   ├── tailwind.config.js
 │   ├── tsconfig.json
-│   ├── vercel.json          # Vercel deployment configuration
-│   └── .env.example         # Documented frontend environment variables
-├── migrations/              # Versioned Supabase SQL migrations
+│   └── vercel.json          # Vercel deployment configuration
+├── migrations/              # Versioned Supabase SQL migrations (001 - 007)
+│   ├── README.md            # Comprehensive migration application guide
 │   ├── 001_initial_schema.sql
 │   ├── 002_security_and_rls.sql
-│   └── 003_realtime_and_indexes.sql
+│   ├── 003_realtime_and_indexes.sql
+│   ├── 004_task_due_at_and_security_hardening.sql
+│   ├── 005_admin_user_roles_and_admin_endpoints.sql
+│   ├── 006_task_activity_view_and_user_profile_sync.sql
+│   └── 007_complete_database_schema_and_indexes.sql
+├── scripts/
+│   ├── apply_migrations.py  # Production PostgreSQL migration runner CLI
+│   └── promote_admin.py     # Initial administrator promotion CLI
 ├── docs/
 │   ├── demo-script.md       # 5-8 minute Loom recording script
 │   ├── interview-preparation.md # 18 topic guides + 25 interview Q&As
-│   └── security-review.md   # Threat model and security architecture review
+│   └── security-review.md   # Comprehensive application security review
 ├── pytest.ini               # Pytest configuration
 ├── render.yaml              # Render infrastructure specification
 └── README.md
@@ -298,17 +310,19 @@ python -m backend.worker --run-once
 ### Run Backend Automated Tests
 ```bash
 # Run pytest from repository root:
-./backend/venv/bin/pytest -v
+PYTHONPATH=. ./backend/venv/bin/pytest -v
 ```
-All **20 tests** verify:
+All **36 tests** verify:
 - Server-side JWT claims extraction and validation
 - Rejection of invalid, missing, or expired tokens
 - Task CRUD, inputs validation, and status transitions
+- Two distinct users receive different UUIDs and isolate their tasks
 - Prevention of Horizontal Privilege Escalation (unrelated users blocked with HTTP 403)
 - Task deletion restricted strictly to creators and admins
-- Notification creation and ownership verification
-- Outbox recording and duplicate email prevention (idempotency)
+- Notification creation, read timestamps, and ownership isolation
+- Outbox recording, event keys, and duplicate email prevention (idempotency)
 - Overdue calculations, timezone boundaries, and reminder exclusions
+- Public setup status verification (`/api/setup/status`) with zero secrets leakage
 
 ### Run Frontend Typechecks & Production Build
 ```bash
@@ -348,6 +362,7 @@ npm run build
    - `SUPABASE_URL`: `https://<your-project-ref>.supabase.co`
    - `SUPABASE_SERVICE_ROLE_KEY`: `<your-supabase-service-role-key>`
    - `SUPABASE_JWT_SECRET`: `<your-supabase-jwt-secret>`
+   - `DATABASE_URL`: `postgresql://postgres.<project-ref>:<password>@aws-0-<region>.pooler.supabase.com:6543/postgres`
    - `GOOGLE_CLIENT_ID`: `<your-google-oauth-client-id>`
    - `GOOGLE_CLIENT_SECRET`: `<your-google-oauth-client-secret>`
    - `GMAIL_SENDER_EMAIL`: `<your-authorized-sender-email>`
@@ -357,14 +372,28 @@ npm run build
    - **Start Command**: `python -m backend.worker --interval 300`
 
 ### Database & Auth — Supabase
-1. In the Supabase SQL Editor, execute migrations in order:
-   - `migrations/001_initial_schema.sql`
-   - `migrations/002_security_and_rls.sql`
-   - `migrations/003_realtime_and_indexes.sql`
+1. Apply migrations using the automated Python CLI or SQL Editor:
+   ```bash
+   # Option A: Automated CLI Runner (with DATABASE_URL set)
+   PYTHONPATH=. backend/venv/bin/python scripts/apply_migrations.py
+
+   # Option B: Supabase SQL Editor (Run 001 through 007 in order)
+   # migrations/001_initial_schema.sql
+   # migrations/002_security_and_rls.sql
+   # migrations/003_realtime_and_indexes.sql
+   # migrations/004_task_due_at_and_security_hardening.sql
+   # migrations/005_admin_user_roles_and_admin_endpoints.sql
+   # migrations/006_task_activity_view_and_user_profile_sync.sql
+   # migrations/007_complete_database_schema_and_indexes.sql
+   ```
 2. Under **Authentication -> Providers**, enable **Google**:
    - Enter your `Client ID` and `Client Secret` from Google Cloud Console.
 3. Under **Authentication -> URL Configuration**:
-   - Add your Vercel domain and `http://localhost:3000/dashboard` to **Redirect URLs**.
+   - Add your Vercel domain and `http://localhost:3000/auth/callback` to **Redirect URLs**.
+4. Promote initial administrator account:
+   ```bash
+   PYTHONPATH=. backend/venv/bin/python scripts/promote_admin.py --email admin@example.com
+   ```
 
 ---
 

@@ -4,7 +4,18 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { ApiClient } from '@/lib/api';
-import { Settings as SettingsIcon, Bell, Shield, Server, CheckCircle2, AlertCircle } from 'lucide-react';
+import { AppShell } from '@/components/AppShell';
+import {
+  Settings as SettingsIcon,
+  Bell,
+  Shield,
+  Server,
+  CheckCircle2,
+  AlertCircle,
+  Database,
+  Mail,
+  Loader2,
+} from 'lucide-react';
 
 export default function SettingsPage() {
   const { user, loading, refreshProfile } = useAuth();
@@ -39,7 +50,7 @@ export default function SettingsPage() {
     try {
       const res = await ApiClient.checkHealth();
       setHealthStatus(res);
-    } catch (e: any) {
+    } catch {
       setHealthStatus({
         status: 'unreachable',
         service: 'taskflow-api',
@@ -56,10 +67,10 @@ export default function SettingsPage() {
     setPrefMessage(null);
     try {
       await ApiClient.updatePreferences(checked);
-      setPrefMessage('Preference updated successfully');
+      setPrefMessage('Notification preference saved successfully');
       await refreshProfile();
       setTimeout(() => setPrefMessage(null), 3000);
-    } catch (err: any) {
+    } catch {
       setPrefMessage('Failed to update preference');
     } finally {
       setSavingPref(false);
@@ -68,134 +79,151 @@ export default function SettingsPage() {
 
   if (loading || !user) {
     return (
-      <div className="flex-1 flex items-center justify-center p-8">
-        <div className="w-8 h-8 border-4 border-brand-200 border-t-brand-600 rounded-full animate-spin" />
+      <div className="min-h-screen bg-[#FAF8F5] flex items-center justify-center">
+        <div className="w-8 h-8 border-3 border-brand-200 border-t-brand-600 rounded-full animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-      <div className="border-b border-slate-200 pb-6">
-        <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
-          <SettingsIcon className="w-6 h-6 text-brand-600" />
-          Settings & Preferences
-        </h1>
-        <p className="text-sm text-slate-500 mt-1">
-          Manage your account profile, notification controls, and service connectivity.
-        </p>
-      </div>
+    <AppShell>
+      <div className="max-w-4xl mx-auto space-y-6">
+        {/* Header */}
+        <div className="pb-2 border-b border-[#EAE6DF]">
+          <h1 className="text-2xl font-bold tracking-tight text-charcoal-900">
+            Settings & Preferences
+          </h1>
+          <p className="text-xs text-charcoal-500 mt-1">
+            Manage your account credentials, Gmail automated notification delivery, and backend health.
+          </p>
+        </div>
 
-      {/* Profile Overview Card */}
-      <div className="p-6 bg-white rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
-        <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-          <Shield className="w-5 h-5 text-brand-600" />
-          User Profile
-        </h2>
+        {/* User Profile Card */}
+        <div className="p-6 bg-white rounded-2xl border border-[#EAE6DF] shadow-subtle space-y-4">
+          <div className="flex items-center gap-2 pb-3 border-b border-[#EAE6DF]">
+            <Shield className="w-4 h-4 text-brand-600" />
+            <h2 className="text-sm font-bold text-charcoal-900">User Identity & Authentication</h2>
+          </div>
 
-        <div className="flex items-center gap-4 pt-2">
-          {user.avatar_url ? (
-            <img
-              src={user.avatar_url}
-              alt={user.full_name}
-              className="w-16 h-16 rounded-full object-cover border-2 border-brand-200"
-            />
-          ) : (
-            <div className="w-16 h-16 rounded-full bg-brand-100 text-brand-700 font-bold text-xl flex items-center justify-center">
-              {user.full_name?.charAt(0) || 'U'}
+          <div className="flex items-center gap-4 pt-1">
+            {user.avatar_url ? (
+              <img
+                src={user.avatar_url}
+                alt={user.full_name}
+                className="w-14 h-14 rounded-full object-cover border-2 border-[#EAE6DF]"
+              />
+            ) : (
+              <div className="w-14 h-14 rounded-full bg-brand-600 text-white font-bold text-lg flex items-center justify-center">
+                {user.full_name?.charAt(0) || 'U'}
+              </div>
+            )}
+
+            <div className="space-y-1">
+              <h3 className="text-base font-bold text-charcoal-900">{user.full_name}</h3>
+              <p className="text-xs text-charcoal-500">{user.email}</p>
+              <div className="flex items-center gap-2 pt-1">
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-ivory-200 text-charcoal-700">
+                  Role: {user.role}
+                </span>
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200/60">
+                  Active Member
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Email & Notification Delivery Preferences */}
+        <div className="p-6 bg-white rounded-2xl border border-[#EAE6DF] shadow-subtle space-y-4">
+          <div className="flex items-center gap-2 pb-3 border-b border-[#EAE6DF]">
+            <Mail className="w-4 h-4 text-brand-600" />
+            <h2 className="text-sm font-bold text-charcoal-900">Automated Gmail Notifications</h2>
+          </div>
+
+          <div className="flex items-center justify-between p-4 bg-ivory-50 rounded-xl border border-[#EAE6DF]">
+            <div className="space-y-0.5 max-w-lg">
+              <h3 className="text-xs font-bold text-charcoal-900">
+                Deadline Reminder Emails (48-Hour Alert)
+              </h3>
+              <p className="text-[11px] text-charcoal-500 leading-relaxed">
+                When enabled, the backend background scheduler dispatches automated notifications
+                via the Gmail API before scheduled task due dates.
+              </p>
+            </div>
+
+            <label className="relative inline-flex items-center cursor-pointer shrink-0">
+              <input
+                type="checkbox"
+                checked={reminderPref}
+                onChange={(e) => handleToggleReminder(e.target.checked)}
+                disabled={savingPref}
+                className="sr-only peer"
+              />
+              <div className="w-11 h-6 bg-stone-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-stone-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-600"></div>
+            </label>
+          </div>
+
+          {prefMessage && (
+            <p className="text-xs text-brand-600 font-semibold">{prefMessage}</p>
+          )}
+        </div>
+
+        {/* System & Architecture Diagnostics */}
+        <div className="p-6 bg-white rounded-2xl border border-[#EAE6DF] shadow-subtle space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-[#EAE6DF]">
+            <div className="flex items-center gap-2">
+              <Server className="w-4 h-4 text-brand-600" />
+              <h2 className="text-sm font-bold text-charcoal-900">
+                Backend System & Database Diagnostics
+              </h2>
+            </div>
+            <button
+              onClick={checkBackendHealth}
+              disabled={checkingHealth}
+              className="text-xs font-semibold text-brand-600 hover:underline inline-flex items-center gap-1"
+            >
+              {checkingHealth && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              Re-check Diagnostics
+            </button>
+          </div>
+
+          {healthStatus && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+              <div className="p-4 bg-ivory-50 rounded-xl border border-[#EAE6DF] flex items-center justify-between">
+                <div>
+                  <span className="text-[11px] text-charcoal-400 font-semibold uppercase">
+                    Flask API Gateway
+                  </span>
+                  <p className="text-sm font-bold text-charcoal-900 capitalize mt-0.5">
+                    {healthStatus.status}
+                  </p>
+                </div>
+                {healthStatus.status === 'healthy' ? (
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                ) : (
+                  <AlertCircle className="w-5 h-5 text-rose-500" />
+                )}
+              </div>
+
+              <div className="p-4 bg-ivory-50 rounded-xl border border-[#EAE6DF] flex items-center justify-between">
+                <div>
+                  <span className="text-[11px] text-charcoal-400 font-semibold uppercase">
+                    Supabase PostgreSQL
+                  </span>
+                  <p className="text-sm font-bold text-charcoal-900 capitalize mt-0.5">
+                    {healthStatus.database}
+                  </p>
+                </div>
+                {healthStatus.database === 'ok' ? (
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                ) : (
+                  <AlertCircle className="w-5 h-5 text-amber-500" />
+                )}
+              </div>
             </div>
           )}
-
-          <div>
-            <h3 className="text-lg font-bold text-slate-900">{user.full_name}</h3>
-            <p className="text-xs text-slate-500">{user.email}</p>
-            <div className="mt-2 flex items-center gap-2">
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-brand-50 text-brand-700 uppercase">
-                Role: {user.role}
-              </span>
-            </div>
-          </div>
         </div>
       </div>
-
-      {/* Notification Preferences */}
-      <div className="p-6 bg-white rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
-        <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-          <Bell className="w-5 h-5 text-brand-600" />
-          Notification Controls
-        </h2>
-
-        <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
-          <div>
-            <h3 className="text-sm font-bold text-slate-900">
-              Deadline Reminder Emails
-            </h3>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Receive automated reminders when tasks assigned to you are approaching due dates.
-            </p>
-          </div>
-
-          <label className="relative inline-flex items-center cursor-pointer">
-            <input
-              type="checkbox"
-              checked={reminderPref}
-              onChange={(e) => handleToggleReminder(e.target.checked)}
-              disabled={savingPref}
-              className="sr-only peer"
-            />
-            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-600"></div>
-          </label>
-        </div>
-
-        {prefMessage && (
-          <p className="text-xs text-brand-600 font-medium">{prefMessage}</p>
-        )}
-      </div>
-
-      {/* Backend & Database Health Check */}
-      <div className="p-6 bg-white rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-            <Server className="w-5 h-5 text-brand-600" />
-            Backend System Diagnostics
-          </h2>
-          <button
-            onClick={checkBackendHealth}
-            disabled={checkingHealth}
-            className="text-xs text-brand-600 hover:underline font-semibold"
-          >
-            {checkingHealth ? 'Checking...' : 'Re-check Diagnostics'}
-          </button>
-        </div>
-
-        {healthStatus && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-            <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between">
-              <div>
-                <span className="text-xs text-slate-500 font-medium">Flask API Gateway</span>
-                <p className="text-sm font-bold text-slate-900 capitalize">{healthStatus.status}</p>
-              </div>
-              {healthStatus.status === 'healthy' ? (
-                <CheckCircle2 className="w-5 h-5 text-emerald-500" />
-              ) : (
-                <AlertCircle className="w-5 h-5 text-rose-500" />
-              )}
-            </div>
-
-            <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between">
-              <div>
-                <span className="text-xs text-slate-500 font-medium">Supabase Database Connection</span>
-                <p className="text-sm font-bold text-slate-900 capitalize">{healthStatus.database}</p>
-              </div>
-              {healthStatus.database === 'ok' ? (
-                <CheckCircle2 className="w-5 h-5 text-emerald-500" />
-              ) : (
-                <AlertCircle className="w-5 h-5 text-amber-500" />
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
+    </AppShell>
   );
 }

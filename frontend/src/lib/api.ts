@@ -5,10 +5,13 @@ export interface UserProfile {
   email: string;
   full_name: string;
   avatar_url?: string;
-  role: 'admin' | 'manager' | 'member';
+  role: 'admin' | 'user';
   reminder_preference?: boolean;
   created_at?: string;
   updated_at?: string;
+  tasks_created?: number;
+  tasks_assigned?: number;
+  tasks_completed?: number;
 }
 
 export interface Task {
@@ -112,6 +115,10 @@ export class ApiClient {
   }
 
   // Auth & Profile
+  static async getMe(): Promise<{ profile: UserProfile; user: UserProfile }> {
+    return this.request<{ profile: UserProfile; user: UserProfile }>('/me');
+  }
+
   static async getProfile(): Promise<{ profile: UserProfile }> {
     return this.request<{ profile: UserProfile }>('/auth/profile');
   }
@@ -215,4 +222,153 @@ export class ApiClient {
   static async getDashboardStats(): Promise<{ stats: DashboardStats }> {
     return this.request<{ stats: DashboardStats }>('/dashboard/stats');
   }
+
+  // =========================================================================
+  // Admin Endpoints (Require 'admin' role)
+  // =========================================================================
+  static async getAdminStats(): Promise<{ stats: any }> {
+    return this.request<{ stats: any }>('/admin/stats');
+  }
+
+  static async getAdminUsers(params: Record<string, any> = {}): Promise<{
+    users: UserProfile[];
+    total: number;
+    page: number;
+    limit: number;
+    total_pages: number;
+  }> {
+    const query = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== '') {
+        query.append(k, String(v));
+      }
+    });
+    const qs = query.toString() ? `?${query.toString()}` : '';
+    return this.request(`/admin/users${qs}`);
+  }
+
+  static async updateAdminUserRole(
+    userId: string,
+    role: 'admin' | 'user'
+  ): Promise<{ message: string; user: UserProfile }> {
+    return this.request<{ message: string; user: UserProfile }>(`/admin/users/${userId}/role`, {
+      method: 'PATCH',
+      body: JSON.stringify({ role }),
+    });
+  }
+
+  static async getAdminTasks(params: Record<string, any> = {}): Promise<{
+    tasks: Task[];
+    total: number;
+    page: number;
+    limit: number;
+    total_pages: number;
+  }> {
+    const query = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== '') {
+        query.append(k, String(v));
+      }
+    });
+    const qs = query.toString() ? `?${query.toString()}` : '';
+    return this.request(`/admin/tasks${qs}`);
+  }
+
+  static async getAdminActivity(params: Record<string, any> = {}): Promise<{
+    activity: any[];
+    total: number;
+    page: number;
+    limit: number;
+    total_pages: number;
+  }> {
+    const query = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== '') {
+        query.append(k, String(v));
+      }
+    });
+    const qs = query.toString() ? `?${query.toString()}` : '';
+    return this.request(`/admin/activity${qs}`);
+  }
+
+  static async getAdminNotifications(): Promise<{
+    notifications: NotificationItem[];
+    email_outbox: any[];
+    total_notifications: number;
+    total_emails: number;
+  }> {
+    return this.request(`/admin/notifications`);
+  }
+
+  static async getSetupStatus(): Promise<SetupStatus> {
+    return this.request<SetupStatus>('/setup/status');
+  }
+
+  static async sendTestEmail(recipientEmail: string, dryRun: boolean = true): Promise<{
+    success: boolean;
+    mode: string;
+    message: string;
+    idempotency_key?: string;
+    recipient?: string;
+    error?: string;
+  }> {
+    return this.request('/setup/test-email', {
+      method: 'POST',
+      body: JSON.stringify({ recipient_email: recipientEmail, dry_run: dryRun }),
+    });
+  }
 }
+
+export interface SetupStatus {
+  status: 'operational' | 'degraded' | string;
+  timestamp: string;
+  service: string;
+  backend: {
+    environment: string;
+    port: number;
+    frontend_url: string;
+    cors_origins: string[];
+    secure_headers_enabled: boolean;
+  };
+  database: {
+    mode: 'live' | 'mock' | string;
+    reachable: boolean;
+    tables: Record<string, { exists: boolean; count: number; status: string }>;
+    migrations: Array<{ id: string; file: string; title: string; description: string }>;
+    direct_connection?: {
+      configured: boolean;
+      connected?: boolean;
+      pooling_enabled?: boolean;
+      min_connections?: number;
+      max_connections?: number;
+      schema_migrations_table?: boolean;
+      applied_migrations_count?: number;
+      error?: string;
+      message?: string;
+    };
+  };
+  authentication: {
+    provider: string;
+    client_id_configured: boolean;
+    client_secret_configured: boolean;
+    supabase_auth_configured: boolean;
+    callback_url: string;
+    auth_protocol: string;
+    account_select_prompt: boolean;
+    roles_supported: string[];
+  };
+  email: {
+    configured: boolean;
+    sender_email: string | null;
+    refresh_token_present: boolean;
+    client_credentials_present: boolean;
+    outbox_stats: {
+      total: number;
+      pending: number;
+      sent: number;
+      failed: number;
+    };
+    reminder_window_hours: number;
+  };
+}
+

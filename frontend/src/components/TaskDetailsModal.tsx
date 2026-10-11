@@ -11,6 +11,7 @@ import {
   CheckCircle,
   AlertTriangle,
   History,
+  Shield,
 } from 'lucide-react';
 import { ApiClient, Task, ActivityLog } from '@/lib/api';
 import { StatusBadge, PriorityBadge } from './Badge';
@@ -82,7 +83,7 @@ export const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
 
     if (isCompleted) {
       return (
-        <span className="text-xs text-slate-500 flex items-center gap-1">
+        <span className="text-xs text-charcoal-500 flex items-center gap-1">
           <Calendar className="w-3.5 h-3.5" /> Due: {due.toLocaleDateString()}
         </span>
       );
@@ -105,7 +106,7 @@ export const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
       );
     } else {
       return (
-        <span className="inline-flex items-center gap-1 text-xs text-slate-600 bg-slate-100 px-2.5 py-1 rounded-full">
+        <span className="inline-flex items-center gap-1 text-xs text-charcoal-600 bg-ivory-200 px-2.5 py-1 rounded-full">
           <Calendar className="w-3.5 h-3.5" /> Due: {due.toLocaleDateString()}
         </span>
       );
@@ -113,19 +114,23 @@ export const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-150">
-      <div className="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-slate-100 max-h-[90vh] flex flex-col overflow-hidden">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-charcoal-950/60 backdrop-blur-sm animate-in fade-in duration-150"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div className="relative w-full max-w-2xl bg-white rounded-2xl shadow-elevated border border-[#EAE6DF] max-h-[90vh] flex flex-col overflow-hidden text-charcoal-900">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#EAE6DF] bg-ivory-50">
           <div className="flex items-center gap-2.5">
             <StatusBadge status={task.status} />
             <PriorityBadge priority={task.priority} />
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <button
               onClick={() => onEdit(task)}
-              className="p-1.5 text-slate-500 hover:text-brand-600 hover:bg-slate-100 rounded-lg transition"
+              className="p-1.5 text-charcoal-500 hover:text-brand-600 hover:bg-ivory-200 rounded-lg transition"
               title="Edit Task"
             >
               <Edit className="w-4 h-4" />
@@ -133,7 +138,7 @@ export const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
             {isCreator && (
               <button
                 onClick={() => onDeleteRequest(task)}
-                className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
+                className="p-1.5 text-charcoal-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
                 title="Delete Task"
               >
                 <Trash2 className="w-4 h-4" />
@@ -141,7 +146,7 @@ export const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
             )}
             <button
               onClick={onClose}
-              className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition"
+              className="p-1.5 text-charcoal-400 hover:text-charcoal-700 rounded-lg hover:bg-ivory-200 transition"
             >
               <X className="w-5 h-5" />
             </button>
@@ -151,18 +156,18 @@ export const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
         {/* Content Body */}
         <div className="p-6 overflow-y-auto space-y-6 flex-1">
           <div>
-            <h1 className="text-xl font-bold text-slate-900 leading-tight">
+            <h1 className="text-xl font-bold text-charcoal-900 leading-tight">
               {task.title}
             </h1>
-            <p className="mt-2 text-sm text-slate-600 whitespace-pre-wrap leading-relaxed">
+            <p className="mt-2 text-sm text-charcoal-600 whitespace-pre-wrap leading-relaxed">
               {task.description || 'No description provided.'}
             </p>
           </div>
 
           {/* Metadata Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-xl bg-slate-50/70 border border-slate-100">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-xl bg-ivory-50 border border-[#EAE6DF]">
             <div>
-              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-1">
+              <span className="text-[11px] font-semibold text-charcoal-400 uppercase tracking-wider block mb-1">
                 Assignee
               </span>
               {task.assignee ? (
@@ -171,34 +176,34 @@ export const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
                     <img
                       src={task.assignee.avatar_url}
                       alt={task.assignee.full_name}
-                      className="w-6 h-6 rounded-full object-cover"
+                      className="w-6 h-6 rounded-full object-cover border border-[#EAE6DF]"
                     />
                   ) : (
-                    <div className="w-6 h-6 rounded-full bg-brand-100 text-brand-700 font-bold text-xs flex items-center justify-center">
+                    <div className="w-6 h-6 rounded-full bg-brand-100 text-brand-700 font-bold text-[10px] flex items-center justify-center">
                       {task.assignee.full_name.charAt(0)}
                     </div>
                   )}
-                  <span className="text-sm font-medium text-slate-800">
+                  <span className="text-sm font-medium text-charcoal-800">
                     {task.assignee.full_name}
                   </span>
                 </div>
               ) : (
-                <span className="text-sm text-slate-400 italic">Unassigned</span>
+                <span className="text-sm text-charcoal-400 italic">Unassigned</span>
               )}
             </div>
 
             <div>
-              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-1">
+              <span className="text-[11px] font-semibold text-charcoal-400 uppercase tracking-wider block mb-1">
                 Due Date
               </span>
-              {getDueBadge() || <span className="text-sm text-slate-400">None</span>}
+              {getDueBadge() || <span className="text-sm text-charcoal-400">None</span>}
             </div>
           </div>
 
           {/* Status Workflow Action */}
           <div className="space-y-2">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">
-              Change Status
+            <span className="text-xs font-semibold text-charcoal-500 uppercase tracking-wider block">
+              Quick Status Transition
             </span>
             <div className="flex items-center gap-2 flex-wrap">
               <button
@@ -206,8 +211,8 @@ export const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
                 onClick={() => handleQuickStatus('todo')}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
                   task.status === 'todo'
-                    ? 'bg-slate-200 text-slate-800 cursor-default'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    ? 'bg-stone-200 text-stone-800 cursor-default'
+                    : 'bg-ivory-200 text-charcoal-600 hover:bg-stone-200'
                 }`}
               >
                 To Do
@@ -217,8 +222,8 @@ export const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
                 onClick={() => handleQuickStatus('in_progress')}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
                   task.status === 'in_progress'
-                    ? 'bg-indigo-600 text-white cursor-default'
-                    : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
+                    ? 'bg-brand-600 text-white cursor-default'
+                    : 'bg-brand-50 text-brand-700 hover:bg-brand-100'
                 }`}
               >
                 In Progress
@@ -239,29 +244,29 @@ export const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
           </div>
 
           {/* Chronological Activity History */}
-          <div className="space-y-3 pt-4 border-t border-slate-100">
-            <div className="flex items-center gap-2 text-xs font-bold text-slate-900 uppercase tracking-wider">
+          <div className="space-y-3 pt-4 border-t border-[#EAE6DF]">
+            <div className="flex items-center gap-2 text-xs font-bold text-charcoal-900 uppercase tracking-wider">
               <History className="w-4 h-4 text-brand-600" />
               Activity History & Audit Trail
             </div>
 
             {loadingActivity ? (
-              <div className="text-xs text-slate-400 py-4 text-center">Loading audit history...</div>
+              <div className="text-xs text-charcoal-400 py-4 text-center">Loading audit history...</div>
             ) : activity.length === 0 ? (
-              <div className="text-xs text-slate-400 py-4 text-center">No activity records found.</div>
+              <div className="text-xs text-charcoal-400 py-4 text-center">No activity records found.</div>
             ) : (
               <div className="space-y-2.5">
                 {activity.map((item) => (
                   <div
                     key={item.id}
-                    className="flex items-start gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100 text-xs text-slate-700"
+                    className="flex items-start gap-3 p-3 rounded-xl bg-ivory-50 border border-[#EAE6DF] text-xs text-charcoal-700"
                   >
                     <div className="w-2 h-2 mt-1.5 rounded-full bg-brand-500 shrink-0" />
                     <div className="flex-1">
                       <div className="flex justify-between items-baseline">
-                        <span className="font-semibold text-slate-900">
+                        <span className="font-semibold text-charcoal-900">
                           {item.user?.full_name || 'Team member'}{' '}
-                          <span className="font-normal text-slate-500">
+                          <span className="font-normal text-charcoal-500">
                             {item.action === 'created'
                               ? 'created the task'
                               : item.action === 'updated'
@@ -269,14 +274,14 @@ export const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
                               : item.action}
                           </span>
                         </span>
-                        <span className="text-[10px] text-slate-400">
+                        <span className="text-[10px] text-charcoal-400">
                           {new Date(item.created_at).toLocaleString()}
                         </span>
                       </div>
                       {item.details && Object.keys(item.details).length > 0 && (
-                        <div className="mt-1 text-slate-500">
+                        <div className="mt-1 text-charcoal-500">
                           {item.details.status_changed && (
-                            <span>Status changed: <strong>{item.details.status_changed}</strong></span>
+                            <span>Status changed to: <strong>{item.details.status_changed}</strong></span>
                           )}
                           {item.details.assignee_changed_to && (
                             <span>Assigned to: <strong>{item.details.assignee_changed_to}</strong></span>

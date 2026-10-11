@@ -1,15 +1,17 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { supabase, isSupabaseConfigured, getSupabaseConfigStatus } from '@/lib/supabase';
 import { ApiClient, UserProfile } from '@/lib/api';
+import { clearQueryCache } from '@/context/QueryProvider';
 
 interface AuthContextType {
   user: UserProfile | null;
   token: string | null;
   loading: boolean;
+  isConfigured: boolean;
+  configError: string | null;
   signInWithGoogle: () => Promise<void>;
-  signInWithDemo: (role?: 'admin' | 'member') => Promise<void>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
@@ -18,8 +20,9 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   token: null,
   loading: true,
+  isConfigured: false,
+  configError: null,
   signInWithGoogle: async () => {},
-  signInWithDemo: async () => {},
   signOut: async () => {},
   refreshProfile: async () => {},
 });
@@ -29,6 +32,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const envStatus = getSupabaseConfigStatus();
+  const isConfigured = envStatus.isConfigured;
+  const configError = envStatus.errorMessage;
+
   const fetchBackendProfile = async (currentToken: string) => {
     try {
       localStorage.setItem('taskflow_auth_token', currentToken);
@@ -36,13 +43,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(res.profile);
     } catch (err) {
       console.error('Failed to load profile from backend:', err);
-      // Fallback user state
-      setUser({
-        id: '11111111-1111-1111-1111-111111111111',
-        email: 'user@taskflow.dev',
-        full_name: 'TaskFlow User',
-        role: 'member',
-      });
+      setUser(null);
     }
   };
 
@@ -51,9 +52,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try {
         const savedToken = localStorage.getItem('taskflow_auth_token');
 
-        if (isSupabaseConfigured()) {
-          const { data } = await supabase.auth.getSession();
-          if (data.session?.access_token) {
+        if (isConfigured) {
+          const { data, error } = await supabase.auth.getSession();
+          if (!error && data.session?.access_token) {
             const activeToken = data.session.access_token;
             setToken(activeToken);
             localStorage.setItem('taskflow_auth_token', activeToken);
@@ -77,14 +78,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     initAuth();
 
     // Listen for Supabase auth events
-    if (isSupabaseConfigured()) {
+    if (isConfigured) {
       const { data: authListener } = supabase.auth.onAuthStateChange(
         async (event, session) => {
           if (session?.access_token) {
             setToken(session.access_token);
             localStorage.setItem('taskflow_auth_token', session.access_token);
             await ApiClient.syncUser({
-              full_name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0],
+              full_name:
+                session.user.user_metadata?.full_name ||
+                session.user.email?.split('@')[0],
               avatar_url: session.user.user_metadata?.avatar_url,
             }).catch(() => {});
             await fetchBackendProfile(session.access_token);
@@ -92,6 +95,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setUser(null);
             setToken(null);
             localStorage.removeItem('taskflow_auth_token');
+            clearQueryCache();
           }
         }
       );
@@ -100,23 +104,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         authListener?.subscription.unsubscribe();
       };
     }
-  }, []);
+  }, [isConfigured]);
 
   const signInWithGoogle = async () => {
     setLoading(true);
-    if (!isSupabaseConfigured()) {
-      // In local demo without live Supabase keys, use Demo Login automatically
-      await signInWithDemo('admin');
-      return;
+    if (!isConfigured) {
+      setLoading(false);
+      throw new Error(
+        'Supabase authentication is not configured. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in frontend/.env.local or visit the Setup Wizard (/setup/authentication).'
+      );
     }
 
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/dashboard`,
+        redirectTo: `${window.location.origin}/auth/callback`,
         queryParams: {
           access_type: 'offline',
-          prompt: 'consent',
+          prompt: 'select_account',
         },
       },
     });
@@ -127,29 +132,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const signInWithDemo = async (role: 'admin' | 'member' = 'admin') => {
-    setLoading(true);
-    const demoToken = role === 'admin'
-      ? 'test-token-11111111-1111-1111-1111-111111111111-admin'
-      : 'test-token-22222222-2222-2222-2222-222222222222-member';
-
-    setToken(demoToken);
-    localStorage.setItem('taskflow_auth_token', demoToken);
-    await fetchBackendProfile(demoToken);
-    setLoading(false);
-  };
-
   const signOut = async () => {
     setLoading(true);
-    if (isSupabaseConfigured()) {
+    if (isConfigured) {
       await supabase.auth.signOut().catch(() => {});
     }
     setUser(null);
     setToken(null);
     localStorage.removeItem('taskflow_auth_token');
+    clearQueryCache();
     setLoading(false);
     if (typeof window !== 'undefined') {
-      window.location.href = '/';
+      window.location.href = '/login';
     }
   };
 
@@ -165,8 +159,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         user,
         token,
         loading,
+        isConfigured,
+        configError,
         signInWithGoogle,
-        signInWithDemo,
         signOut,
         refreshProfile,
       }}

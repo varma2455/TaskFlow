@@ -45,14 +45,14 @@ def test_deadline_reminders_and_exclusions(client, creator_headers):
     # 1. Normal task due soon -> Should trigger reminder
     client.post("/api/tasks", headers=creator_headers, json={
         "title": "Eligible Task",
-        "assignee_id": "22222222-2222-2222-2222-222222222222", # Sarah (reminder_preference=True)
+        "assignee_id": "22222222-2222-2222-2222-222222222222", # Test User B (reminder_preference=True)
         "due_date": soon_due
     })
 
     # 2. Task with reminder_preference = False -> Should be skipped
     client.post("/api/tasks", headers=creator_headers, json={
         "title": "Muted User Task",
-        "assignee_id": "33333333-3333-3333-3333-333333333333", # Unrelated User (reminder_preference=False)
+        "assignee_id": "33333333-3333-3333-3333-333333333333", # Test Muted User (reminder_preference=False)
         "due_date": soon_due
     })
 

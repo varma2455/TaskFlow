@@ -1,15 +1,31 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { X, Calendar, User, Flag, AlertCircle } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+import { X, Calendar, User, Flag, AlertCircle, Loader2, Check } from 'lucide-react';
 import { ApiClient, Task, UserProfile } from '@/lib/api';
+
+const taskSchema = z.object({
+  title: z
+    .string()
+    .min(1, 'Task title is required')
+    .max(200, 'Title cannot exceed 200 characters'),
+  description: z.string().max(2000, 'Description is too long').optional().or(z.literal('')),
+  priority: z.enum(['low', 'medium', 'high', 'urgent']),
+  assignee_id: z.string().optional().or(z.literal('')),
+  due_date: z.string().optional().or(z.literal('')),
+});
+
+type TaskFormData = z.infer<typeof taskSchema>;
 
 interface TaskModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: (task: Task) => void;
   taskToEdit?: Task | null;
-  teammates: UserProfile[];
+  teammates?: UserProfile[];
 }
 
 export const TaskModal: React.FC<TaskModalProps> = ({
@@ -17,146 +33,186 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   onClose,
   onSuccess,
   taskToEdit,
-  teammates,
+  teammates = [],
 }) => {
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [priority, setPriority] = useState<'low' | 'medium' | 'high' | 'urgent'>('medium');
-  const [assigneeId, setAssigneeId] = useState<string>('');
-  const [dueDate, setDueDate] = useState<string>('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [serverError, setServerError] = useState<string | null>(null);
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    setValue,
+    formState: { errors, isSubmitting },
+  } = useForm<TaskFormData>({
+    resolver: zodResolver(taskSchema),
+    defaultValues: {
+      title: '',
+      description: '',
+      priority: 'medium',
+      assignee_id: '',
+      due_date: '',
+    },
+  });
 
   useEffect(() => {
-    if (taskToEdit) {
-      setTitle(taskToEdit.title || '');
-      setDescription(taskToEdit.description || '');
-      setPriority(taskToEdit.priority || 'medium');
-      setAssigneeId(taskToEdit.assignee_id ? String(taskToEdit.assignee_id) : '');
-      if (taskToEdit.due_date) {
-        // Format for datetime-local: YYYY-MM-DDTHH:mm
-        const date = new Date(taskToEdit.due_date);
-        const pad = (n: number) => (n < 10 ? '0' + n : n);
-        const formatted = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-        setDueDate(formatted);
+    if (isOpen) {
+      setServerError(null);
+      if (taskToEdit) {
+        let formattedDate = '';
+        if (taskToEdit.due_date) {
+          const date = new Date(taskToEdit.due_date);
+          const pad = (n: number) => (n < 10 ? '0' + n : n);
+          formattedDate = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+        }
+        reset({
+          title: taskToEdit.title || '',
+          description: taskToEdit.description || '',
+          priority: taskToEdit.priority || 'medium',
+          assignee_id: taskToEdit.assignee_id ? String(taskToEdit.assignee_id) : '',
+          due_date: formattedDate,
+        });
       } else {
-        setDueDate('');
+        reset({
+          title: '',
+          description: '',
+          priority: 'medium',
+          assignee_id: '',
+          due_date: '',
+        });
       }
-    } else {
-      setTitle('');
-      setDescription('');
-      setPriority('medium');
-      setAssigneeId('');
-      setDueDate('');
     }
-    setError(null);
-  }, [taskToEdit, isOpen]);
+  }, [taskToEdit, isOpen, reset]);
+
+  // Handle escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen && !isSubmitting) {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, isSubmitting, onClose]);
 
   if (!isOpen) return null;
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title.trim()) {
-      setError('Task title is required');
-      return;
-    }
-
-    setIsLoading(true);
-    setError(null);
-
+  const onSubmit = async (data: TaskFormData) => {
+    setServerError(null);
     try {
-      const isoDueDate = dueDate ? new Date(dueDate).toISOString() : null;
+      const isoDueDate = data.due_date ? new Date(data.due_date).toISOString() : null;
+
       if (taskToEdit) {
         const res = await ApiClient.updateTask(taskToEdit.id, {
-          title: title.trim(),
-          description: description.trim(),
-          priority,
-          assignee_id: assigneeId || null,
+          title: data.title.trim(),
+          description: data.description ? data.description.trim() : '',
+          priority: data.priority,
+          assignee_id: data.assignee_id || null,
           due_date: isoDueDate,
         });
         onSuccess(res.task);
       } else {
         const res = await ApiClient.createTask({
-          title: title.trim(),
-          description: description.trim(),
-          priority,
-          assignee_id: assigneeId || null,
+          title: data.title.trim(),
+          description: data.description ? data.description.trim() : '',
+          priority: data.priority,
+          assignee_id: data.assignee_id || null,
           due_date: isoDueDate,
         });
         onSuccess(res.task);
       }
       onClose();
     } catch (err: any) {
-      setError(err.message || 'Failed to save task');
-    } finally {
-      setIsLoading(false);
+      setServerError(err.message || 'Failed to save task. Please try again.');
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-150">
-      <div className="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-charcoal-950/60 backdrop-blur-sm animate-in fade-in duration-150"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="task-modal-title"
+    >
+      <div className="relative w-full max-w-lg bg-white rounded-2xl shadow-elevated border border-[#EAE6DF] overflow-hidden text-charcoal-900">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50">
-          <h2 className="text-lg font-bold text-slate-900">
-            {taskToEdit ? 'Edit Task' : 'Create New Task'}
-          </h2>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#EAE6DF] bg-ivory-50">
+          <div>
+            <h2 id="task-modal-title" className="text-base font-bold text-charcoal-900">
+              {taskToEdit ? 'Edit Task' : 'Create New Task'}
+            </h2>
+            <p className="text-xs text-charcoal-500 mt-0.5">
+              {taskToEdit
+                ? 'Update task details, deadline, and assignment.'
+                : 'Fill out details to schedule a task and notify your team.'}
+            </p>
+          </div>
           <button
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition"
+            disabled={isSubmitting}
+            className="p-1.5 rounded-lg text-charcoal-400 hover:text-charcoal-700 hover:bg-ivory-200 transition"
+            aria-label="Close dialog"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Error Alert */}
-        {error && (
-          <div className="mx-6 mt-4 p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-center gap-2 text-rose-700 text-xs">
-            <AlertCircle className="w-4 h-4 shrink-0" />
-            <span>{error}</span>
+        {/* Server Error Alert */}
+        {serverError && (
+          <div className="mx-6 mt-4 p-3 rounded-xl bg-rose-50 border border-rose-200 flex items-start gap-2.5 text-xs text-rose-700">
+            <AlertCircle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+            <p>{serverError}</p>
           </div>
         )}
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-              Task Title *
+        <form onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-4">
+          {/* Title */}
+          <div className="space-y-1.5">
+            <label htmlFor="task-title" className="block text-xs font-semibold text-charcoal-800">
+              Task Title <span className="text-rose-500">*</span>
             </label>
             <input
+              id="task-title"
               type="text"
-              required
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Implement Supabase Realtime subscriptions"
-              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition"
+              placeholder="e.g., Implement Supabase Realtime synchronization"
+              {...register('title')}
+              className={`w-full px-3.5 py-2 text-sm rounded-xl border bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 transition placeholder:text-charcoal-400 ${
+                errors.title ? 'border-rose-400 bg-rose-50/20' : 'border-[#D9D5CC]'
+              }`}
             />
+            {errors.title && (
+              <p className="text-[11px] text-rose-600 font-medium">{errors.title.message}</p>
+            )}
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-              Description
+          {/* Description */}
+          <div className="space-y-1.5">
+            <label htmlFor="task-description" className="block text-xs font-semibold text-charcoal-800">
+              Description <span className="text-charcoal-400 font-normal">(Optional)</span>
             </label>
             <textarea
+              id="task-description"
               rows={3}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Add key deliverables, acceptance criteria, or context..."
-              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition"
+              placeholder="Add key requirements, acceptance criteria, or context..."
+              {...register('description')}
+              className="w-full px-3.5 py-2 text-sm rounded-xl border border-[#D9D5CC] bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 transition placeholder:text-charcoal-400 resize-none"
             />
+            {errors.description && (
+              <p className="text-[11px] text-rose-600 font-medium">{errors.description.message}</p>
+            )}
           </div>
 
+          {/* Priority & Assignee Row */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {/* Priority */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                <Flag className="w-3.5 h-3.5 text-slate-500" />
-                Priority
+            <div className="space-y-1.5">
+              <label htmlFor="task-priority" className="block text-xs font-semibold text-charcoal-800 flex items-center gap-1.5">
+                <Flag className="w-3.5 h-3.5 text-brand-600" /> Priority
               </label>
               <select
-                value={priority}
-                onChange={(e) => setPriority(e.target.value as any)}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition"
+                id="task-priority"
+                {...register('priority')}
+                className="w-full px-3 py-2 text-sm rounded-xl border border-[#D9D5CC] bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 transition"
               >
                 <option value="low">Low</option>
                 <option value="medium">Medium</option>
@@ -166,15 +222,14 @@ export const TaskModal: React.FC<TaskModalProps> = ({
             </div>
 
             {/* Assignee */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                <User className="w-3.5 h-3.5 text-slate-500" />
-                Assignee
+            <div className="space-y-1.5">
+              <label htmlFor="task-assignee" className="block text-xs font-semibold text-charcoal-800 flex items-center gap-1.5">
+                <User className="w-3.5 h-3.5 text-brand-600" /> Assignee
               </label>
               <select
-                value={assigneeId}
-                onChange={(e) => setAssigneeId(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition"
+                id="task-assignee"
+                {...register('assignee_id')}
+                className="w-full px-3 py-2 text-sm rounded-xl border border-[#D9D5CC] bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 transition"
               >
                 <option value="">Unassigned</option>
                 {teammates.map((member) => (
@@ -187,36 +242,47 @@ export const TaskModal: React.FC<TaskModalProps> = ({
           </div>
 
           {/* Due Date */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-              <Calendar className="w-3.5 h-3.5 text-slate-500" />
-              Due Date & Time
+          <div className="space-y-1.5">
+            <label htmlFor="task-due-date" className="block text-xs font-semibold text-charcoal-800 flex items-center gap-1.5">
+              <Calendar className="w-3.5 h-3.5 text-brand-600" /> Due Date & Time
             </label>
             <input
+              id="task-due-date"
               type="datetime-local"
-              value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
-              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition"
+              {...register('due_date')}
+              className="w-full px-3.5 py-2 text-sm rounded-xl border border-[#D9D5CC] bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 transition"
             />
+            <p className="text-[11px] text-charcoal-400">
+              Teammate will receive transactional email reminders within 48h of deadline.
+            </p>
           </div>
 
           {/* Actions */}
-          <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
+          <div className="pt-4 border-t border-[#EAE6DF] flex items-center justify-end gap-3">
             <button
               type="button"
               onClick={onClose}
-              disabled={isLoading}
-              className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition"
+              disabled={isSubmitting}
+              className="px-4 py-2 text-xs font-semibold text-charcoal-600 hover:text-charcoal-900 hover:bg-ivory-200 rounded-xl transition"
             >
               Cancel
             </button>
             <button
               type="submit"
-              disabled={isLoading}
-              className="px-5 py-2.5 text-sm font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-xl transition flex items-center gap-2 shadow-md shadow-brand-500/20 disabled:bg-brand-400"
+              disabled={isSubmitting}
+              className="inline-flex items-center gap-2 px-5 py-2 text-xs font-semibold text-white bg-brand-600 hover:bg-brand-700 active:bg-brand-800 rounded-xl shadow-sm transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isLoading && <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
-              {taskToEdit ? 'Save Changes' : 'Create Task'}
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Check className="w-4 h-4" />
+                  {taskToEdit ? 'Save Changes' : 'Create Task'}
+                </>
+              )}
             </button>
           </div>
         </form>

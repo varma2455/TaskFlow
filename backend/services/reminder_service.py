@@ -124,14 +124,15 @@ class ReminderService:
         """
         supabase = get_supabase_client()
         user_id = current_user["id"]
-        is_admin = current_user.get("role") in ("admin", "manager")
+        is_admin = current_user.get("role") == "admin"
 
         res = supabase.table("tasks").select("*").execute()
         all_tasks = res.data or []
 
+        # Scope strictly to tasks the current user created or was assigned to
         user_tasks = [
             t for t in all_tasks
-            if is_admin or str(t.get("creator_id")) == user_id or str(t.get("assignee_id")) == user_id
+            if str(t.get("creator_id")) == user_id or str(t.get("assignee_id")) == user_id
         ]
 
         now = datetime.now(timezone.utc)

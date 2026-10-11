@@ -12,9 +12,42 @@ class TestConfig(Config):
 
 @pytest.fixture(autouse=True)
 def reset_db():
-    """Resets mock data store before each test run."""
+    """Resets mock data store before each test run and sets up isolated test accounts."""
     mock_store.reset()
+    mock_store.profiles = [
+        {
+            "id": "11111111-1111-1111-1111-111111111111",
+            "email": "test-admin@test.local",
+            "full_name": "Test Administrator",
+            "avatar_url": "",
+            "role": "admin",
+            "reminder_preference": True,
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z",
+        },
+        {
+            "id": "22222222-2222-2222-2222-222222222222",
+            "email": "test-user-b@test.local",
+            "full_name": "Test User B",
+            "avatar_url": "",
+            "role": "user",
+            "reminder_preference": True,
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z",
+        },
+        {
+            "id": "33333333-3333-3333-3333-333333333333",
+            "email": "test-muted@test.local",
+            "full_name": "Test Muted User",
+            "avatar_url": "",
+            "role": "user",
+            "reminder_preference": False,
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z",
+        }
+    ]
     yield
+    mock_store.reset()
 
 @pytest.fixture
 def app():
@@ -35,20 +68,20 @@ def admin_headers():
 @pytest.fixture
 def creator_headers():
     return {
-        "Authorization": "Bearer test-token-11111111-1111-1111-1111-111111111111-member",
+        "Authorization": "Bearer test-token-11111111-1111-1111-1111-111111111111-user",
         "Content-Type": "application/json"
     }
 
 @pytest.fixture
 def assignee_headers():
     return {
-        "Authorization": "Bearer test-token-22222222-2222-2222-2222-222222222222-member",
+        "Authorization": "Bearer test-token-22222222-2222-2222-2222-222222222222-user",
         "Content-Type": "application/json"
     }
 
 @pytest.fixture
 def unrelated_headers():
     return {
-        "Authorization": "Bearer test-token-33333333-3333-3333-3333-333333333333-member",
+        "Authorization": "Bearer test-token-33333333-3333-3333-3333-333333333333-user",
         "Content-Type": "application/json"
     }
